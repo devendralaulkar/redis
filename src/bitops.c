@@ -96,24 +96,31 @@ size_t redisPopcount(void *s, long count) {
 /* Set/Reset bit at given offset, on given object. Returns original value
  *
  */
-int setbitValue(robj *o,size_t bitoffset,long on) {
+int* setbitValue(robj *o,size_t *bitoffset,long *on, int numbits) {
     int byte, bit;
     int byteval, bitval;
- 
+    int i;
+    int *results;
+
+    results = zmalloc(sizeof(int) * numbits);
+
     /* Grow sds value to the right length if necessary */
-    byte = bitoffset >> 3;
-    o->ptr = sdsgrowzero(o->ptr,byte+1);
+    for (i=0; i<numbits; i++) {
+        byte = bitoffset[i] >> 3;
+        o->ptr = sdsgrowzero(o->ptr,byte+1);
 
-    /* Get current values */
-    byteval = ((uint8_t*)o->ptr)[byte];
-    bit = 7 - (bitoffset & 0x7);
-    bitval = byteval & (1 << bit);
+        /* Get current values */
+        byteval = ((uint8_t*)o->ptr)[byte];
+        bit = 7 - (bitoffset[i] & 0x7);
+        bitval = byteval & (1 << bit);
 
-    /* Update byte with new bit value and return original value */
-    byteval &= ~(1 << bit);
-    byteval |= ((on & 0x1) << bit);
-    ((uint8_t*)o->ptr)[byte] = byteval;
-    return bitval;
+        /* Update byte with new bit value and return original value */
+        byteval &= ~(1 << bit);
+        byteval |= ((on[i] & 0x1) << bit);
+        ((uint8_t*)o->ptr)[byte] = byteval;
+        results[i] = bitval;
+    }
+    return results;
 }
 
 /* Get bit at given offset
@@ -160,7 +167,7 @@ void setbitCommand(redisClient *c) {
     char *err = "bit is not an integer or out of range";
     size_t bitoffset;
     long on;
-    int bitval;
+    int *bitval;
 
     if (getBitOffsetFromArgument(c,c->argv[2],&bitoffset) != REDIS_OK)
         return;
@@ -189,12 +196,12 @@ void setbitCommand(redisClient *c) {
             dbOverwrite(c->db,c->argv[1],o);
         }
     }
-    bitval = setbitValue(o, bitoffset, on);
+    bitval = setbitValue(o, &bitoffset, &on, 1);
     signalModifiedKey(c->db,c->argv[1]);
     notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"setbit",c->argv[1],c->db->id);
     server.dirty++;
-    addReply(c, bitval ? shared.cone : shared.czero);
-    
+    addReply(c, bitval[0] ? shared.cone : shared.czero);
+    zfree(bitval);
 }
 
 
@@ -202,15 +209,15 @@ void setbitCommand(redisClient *c) {
 void getbitCommand(redisClient *c) {
     robj *o;
     size_t *bitval;
-    size_t bitoffset[1];
+    size_t bitoffset;
 
-    if (getBitOffsetFromArgument(c,c->argv[2],&bitoffset[0]) != REDIS_OK)
+    if (getBitOffsetFromArgument(c,c->argv[2],&bitoffset) != REDIS_OK)
         return;
 
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.czero)) == NULL ||
         checkType(c,o,REDIS_STRING)) return;
 
-    bitval = getbitValue(o, bitoffset, 1);
+    bitval = getbitValue(o, &bitoffset, 1);
     addReply(c, bitval[0] ? shared.cone : shared.czero);
     zfree(bitval);
 }
