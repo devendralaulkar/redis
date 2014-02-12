@@ -93,7 +93,10 @@ size_t redisPopcount(void *s, long count) {
     return bits;
 }
 
-int setbitValue(redisClient *c,robj *o,size_t bitoffset,long on) {
+/* Set/Reset bit at given offset, on given object. Returns original value
+ *
+ */
+int setbitValue(robj *o,size_t bitoffset,long on) {
     int byte, bit;
     int byteval, bitval;
  
@@ -113,6 +116,35 @@ int setbitValue(redisClient *c,robj *o,size_t bitoffset,long on) {
     return bitval;
 }
 
+/* Get bit at given offset
+ *
+ */
+size_t* getbitValue(robj *o, size_t *bitoffset, int requested) {
+    char llbuf[32];
+    size_t byte, bit;
+    size_t *results;
+    int i;
+
+    results = zmalloc(sizeof(size_t) * requested);
+
+    for (i=0; i < requested; i++) {
+        byte = bitoffset[i] >> 3;
+        bit = 7 - (bitoffset[i] & 0x7);
+        if (o->encoding != REDIS_ENCODING_RAW) {
+          if (byte < (size_t)ll2string(llbuf,sizeof(llbuf),(long)o->ptr))
+              results[i] = llbuf[byte] & (1 << bit);
+          else
+              results[i] = 0;
+        } else {
+            if (byte < sdslen(o->ptr))
+                results[i] = ((uint8_t*)o->ptr)[byte] & (1 << bit);
+            else
+                results[i] = 0;
+        }
+    }
+
+    return results;
+}
 /* -----------------------------------------------------------------------------
  * Bits related string commands: GETBIT, SETBIT, BITCOUNT, BITOP.
  * -------------------------------------------------------------------------- */
@@ -157,39 +189,30 @@ void setbitCommand(redisClient *c) {
             dbOverwrite(c->db,c->argv[1],o);
         }
     }
-    bitval = setbitValue(c, o, bitoffset, on);
+    bitval = setbitValue(o, bitoffset, on);
     signalModifiedKey(c->db,c->argv[1]);
     notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"setbit",c->argv[1],c->db->id);
     server.dirty++;
     addReply(c, bitval ? shared.cone : shared.czero);
+    
 }
 
 
 /* GETBIT key offset */
 void getbitCommand(redisClient *c) {
     robj *o;
-    char llbuf[32];
-    size_t bitoffset;
-    size_t byte, bit;
-    size_t bitval = 0;
+    size_t *bitval;
+    size_t bitoffset[1];
 
-    if (getBitOffsetFromArgument(c,c->argv[2],&bitoffset) != REDIS_OK)
+    if (getBitOffsetFromArgument(c,c->argv[2],&bitoffset[0]) != REDIS_OK)
         return;
 
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.czero)) == NULL ||
         checkType(c,o,REDIS_STRING)) return;
 
-    byte = bitoffset >> 3;
-    bit = 7 - (bitoffset & 0x7);
-    if (o->encoding != REDIS_ENCODING_RAW) {
-        if (byte < (size_t)ll2string(llbuf,sizeof(llbuf),(long)o->ptr))
-            bitval = llbuf[byte] & (1 << bit);
-    } else {
-        if (byte < sdslen(o->ptr))
-            bitval = ((uint8_t*)o->ptr)[byte] & (1 << bit);
-    }
-
-    addReply(c, bitval ? shared.cone : shared.czero);
+    bitval = getbitValue(o, bitoffset, 1);
+    addReply(c, bitval[0] ? shared.cone : shared.czero);
+    zfree(bitval);
 }
 
 /* BITOP op_name target_key src_key1 src_key2 src_key3 ... src_keyN */
