@@ -161,6 +161,36 @@ size_t* getbitValue(robj *o, size_t *bitoffset, int requested) {
 #define BITOP_XOR   2
 #define BITOP_NOT   3
 
+/* SETBLOOM key size numhash */
+void setbloomCommand(redisClient *c) {
+    // First param is m, second is k
+    long m, k;
+    robj *o;
+    char *err = "Key already exists";
+
+    if (getLongFromObjectOrReply(c,c->argv[2],&m,err) != REDIS_OK)
+        return;
+
+    if (getLongFromObjectOrReply(c,c->argv[3],&k,err) != REDIS_OK)
+        return;
+
+    o = lookupKeyWrite(c->db,c->argv[1]);
+    if (o != NULL) {
+        addReplyError(c,err);
+        return;
+    }
+    o = createObject(REDIS_STRING,sdsnewlen(NULL, sizeof(long)*2));
+    dbAdd(c->db,c->argv[1],o);
+    ((long*)o->ptr)[0] = m;
+    ((long*)o->ptr)[1] = k;
+
+    signalModifiedKey(c->db,c->argv[1]);
+    notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"setbit",c->argv[1],c->db->id);
+    server.dirty++;
+    addReply(c, shared.cone);
+
+}
+
 /* SETBIT key offset bitvalue */
 void setbitCommand(redisClient *c) {
     robj *o;

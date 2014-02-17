@@ -1341,6 +1341,9 @@ void bitopCommand(redisClient *c);
 void bitcountCommand(redisClient *c);
 void replconfCommand(redisClient *c);
 
+/* Bloom filter commands */
+void setbloomCommand(redisClient *c);
+
 #if defined(__GNUC__)
 void *calloc(size_t count, size_t size) __attribute__ ((deprecated));
 void free(void *ptr) __attribute__ ((deprecated));
