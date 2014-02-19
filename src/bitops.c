@@ -188,7 +188,7 @@ void binitCommand(redisClient *c) {
     signalModifiedKey(c->db,c->argv[1]);
     notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"setbit",c->argv[1],c->db->id);
     server.dirty++;
-    addReply(c, shared.cone);
+    addReply(c, shared.ok);
 }
 
 uint64* getHashes(const char *data, long k, long m) {
