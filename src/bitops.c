@@ -163,7 +163,7 @@ size_t* getbitValue(robj *o, size_t *bitoffset, int requested) {
 #define BITOP_NOT   3
 
 /* SETBLOOM key size numhash */
-void setbloomCommand(redisClient *c) {
+void binitCommand(redisClient *c) {
     // First param is m, second is k
     long m, k;
     robj *o;
@@ -210,8 +210,8 @@ uint64* getHashes(const char *data, long k, long m) {
   return result;
 }
 
-/* ADDBLOOM key dt*/
-void addbloomCommand(redisClient *c) {
+/* BADD key dt*/
+void baddCommand(redisClient *c) {
     // First param is m, second is k
     long m, k;
     robj *o;
@@ -255,7 +255,7 @@ void addbloomCommand(redisClient *c) {
 
 }
 
-void querybloomCommand(redisClient *c) {
+void bismemberCommand(redisClient *c) {
    // First param is m, second is k
     long m, k;
     robj *o;

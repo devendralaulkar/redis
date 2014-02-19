@@ -258,9 +258,9 @@ struct redisCommand redisCommandTable[] = {
     {"time",timeCommand,1,"rR",0,NULL,0,0,0,0,0},
     {"bitop",bitopCommand,-4,"wm",0,NULL,2,-1,1,0,0},
     {"bitcount",bitcountCommand,-2,"r",0,NULL,1,1,1,0,0},
-    {"setbloom",setbloomCommand,4,"wm",0,NULL,1,1,1,0,0},
-    {"addbloom",addbloomCommand,3,"wm",0,NULL,1,1,1,0,0},
-    {"querybloom",querybloomCommand,3,"wm",0,NULL,1,1,1,0,0},
+    {"binit",binitCommand,4,"wm",0,NULL,1,1,1,0,0},
+    {"badd",baddCommand,3,"wm",0,NULL,1,1,1,0,0},
+    {"bismember",bismemberCommand,3,"r",0,NULL,1,1,1,0,0},
 };
 
 /*============================ Utility functions ============================ */
