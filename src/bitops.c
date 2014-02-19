@@ -29,6 +29,7 @@
  */
 
 #include "redis.h"
+#include "city.h"
 
 /* -----------------------------------------------------------------------------
  * Helpers and low level bit functions.
@@ -188,8 +189,107 @@ void setbloomCommand(redisClient *c) {
     notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"setbit",c->argv[1],c->db->id);
     server.dirty++;
     addReply(c, shared.cone);
+}
+
+uint64* getHashes(const char *data, long k, long m) {
+  uint128 hash;
+  uint64 *result = zmalloc(sizeof(uint64) * k);
+  int i;
+  int sum = sizeof(long) * 2;
+
+  hash = CityHash128(data, strlen(data));
+  result[0] = (hash.first % (m+sum)) + sum;
+  if (k == 1) {
+    return result;
+  }
+
+  result[1] = (hash.second % (m+sum)) + sum;
+  for (i=2; i < k; i++) {
+    result[i] = (hash.first + hash.second * i) % (m+sum) + sum;
+  }
+  return result;
+}
+
+/* ADDBLOOM key dt*/
+void addbloomCommand(redisClient *c) {
+    // First param is m, second is k
+    long m, k;
+    robj *o;
+    char *data;
+    char *err = "Bloom filter does not exist";
+    uint64* hashes;
+    long *on;
+    int i;
+    int *bitval;
+    int exists = 0;
+
+    o = lookupKeyWrite(c->db,c->argv[1]);
+    if (o == NULL) {
+        addReplyError(c,err);
+        return;
+    }
+
+    m = ((long*)o->ptr)[0];
+    k = ((long*)o->ptr)[1];
+    data = c->argv[2]->ptr;
+    hashes = getHashes(data, k, m);
+    on = zmalloc(sizeof(long) * k);
+    for(i=0; i<k; i++) {
+      on[i] = 1;
+    }
+    bitval = setbitValue(o, hashes, on, k);
+    exists = 1;
+    for (i=0; i < k; i++) {
+      if (bitval[i] == 0) {
+        exists = 0;
+      }
+    }
+    zfree(on);
+    zfree(hashes);
+    zfree(bitval);
+
+    signalModifiedKey(c->db,c->argv[1]);
+    notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"setbit",c->argv[1],c->db->id);
+    server.dirty++;
+    addReply(c, exists ? shared.cone : shared.czero);
 
 }
+
+void querybloomCommand(redisClient *c) {
+   // First param is m, second is k
+    long m, k;
+    robj *o;
+    char *data;
+    char *err = "Bloom filter does not exist";
+    uint64* hashes;
+    int i;
+    size_t *bitval;
+    int exists = 0;
+
+    o = lookupKeyWrite(c->db,c->argv[1]);
+    if (o == NULL) {
+        addReplyError(c,err);
+        return;
+    }
+
+    m = ((long*)o->ptr)[0];
+    k = ((long*)o->ptr)[1];
+    data = c->argv[2]->ptr;
+    hashes = getHashes(data, k, m);
+
+    bitval = getbitValue(o, hashes, k);
+    exists = 1;
+    for (i=0; i < k; i++) {
+      if (bitval[i] == 0) {
+        exists = 0;
+      }
+    }
+    zfree(hashes);
+    zfree(bitval);
+    addReply(c, exists ? shared.cone : shared.czero);
+
+}
+
 
 /* SETBIT key offset bitvalue */
 void setbitCommand(redisClient *c) {
